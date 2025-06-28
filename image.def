@@ -1,6 +1,9 @@
 Bootstrap: docker
 From: debian:12
 
+%files
+server.properties /server.properties
+
 %arguments
 kafka_version=2.13
 
@@ -36,15 +39,11 @@ apt clean
 echo "export CLUSTER_ID=\"$(kafka-storage random-uuid)\"" >> $APPTAINER_ENVIRONMENT
 
 %labels
-Version 1.0
+Version 1.1
 
 %startscript
-cat /etc/kafka/kraft/server.properties | sed "s/:9092/:${BROKER_PORT}/g" | sed "s/:9093/:${CONTROLLER_PORT}/g" > server.properties
+cat /server.properties | sed "s/:9092/:${BROKER_PORT}/g" | sed "s/:9093/:${CONTROLLER_PORT}/g" > server.properties
 kafka-storage format -t ${CLUSTER_ID} -c server.properties
 kafka-server-start server.properties
 
-%runscript
-cat /etc/kafka/kraft/server.properties | sed "s/:9092/:${BROKER_PORT}/g" | sed "s/:9093/:${CONTROLLER_PORT}/g" > server.properties
-kafka-storage format -t ${CLUSTER_ID} -c server.properties
-kafka-server-start server.properties
 
