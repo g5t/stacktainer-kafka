@@ -3,14 +3,25 @@ From: debian:12
 
 %files
 server.properties /server.properties
+start-kafka.sh /start-kafka.sh
 
 %arguments
 kafka_version=2.13
 
 %environment
 export LC_ALL=C
-export BROKER_PORT=${BROKER_PORT:-'9092'}
-export CONTROLLER_PORT=${CONTROLLER_PORT:-'9093'}
+export BROKER_PORT=${BROKER_PORT:-9092}
+export CONTROLLER_PORT=${CONTROLLER_PORT:-9093}
+# KAFKA_STORAGE_DIR is deliberately *not* defaulted here: its default depends on
+# BROKER_PORT, and --env values are applied after this file is sourced, so a port
+# override would not be visible yet. start-kafka.sh fills it in instead.
+# Delete stream data this long after it was produced (ms). The file-writer consumes
+# within seconds; this is slack, not durability.
+export KAFKA_RETENTION_MS=${KAFKA_RETENTION_MS:-300000}
+# Hard per-partition ceiling (bytes) for when a producer outruns the file-writer.
+export KAFKA_RETENTION_BYTES=${KAFKA_RETENTION_BYTES:-268435456}
+# How often the active segment is closed (ms). Retention cannot touch an open segment.
+export KAFKA_SEGMENT_MS=${KAFKA_SEGMENT_MS:-30000}
 
 %post
 apt -y update && apt -y install wget gpg default-jre
@@ -36,14 +47,15 @@ apt-get -y update && apt-get -y install confluent-community-2.13
 apt -y remove wget gpg && apt -y autoremove
 apt clean
 
+chmod +x /start-kafka.sh
+
 echo "export CLUSTER_ID=\"$(kafka-storage random-uuid)\"" >> $APPTAINER_ENVIRONMENT
 
 %labels
-Version 1.1
+Version 3.1
+
+%runscript
+exec /start-kafka.sh
 
 %startscript
-cat /server.properties | sed "s/:9092/:${BROKER_PORT}/g" | sed "s/:9093/:${CONTROLLER_PORT}/g" > server.properties
-kafka-storage format -t ${CLUSTER_ID} -c server.properties
-kafka-server-start server.properties
-
-
+exec /start-kafka.sh
