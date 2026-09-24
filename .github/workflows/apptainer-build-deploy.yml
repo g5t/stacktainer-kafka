@@ -17,6 +17,10 @@ jobs:
     steps:
       - name: Install Apptainer
         uses: uw-psych/apptainer-actions/setup@main
+        with:
+          # This step breaks with apptainer 1.4.2
+          # https://github.com/uw-psych/apptainer-actions/issues/1
+          apptainer-version: 1.4.1
       
       - name: Check out
         uses: actions/checkout@v4
@@ -34,5 +38,4 @@ jobs:
           deffile: image.def
           image-version: ${{ env.IMAGE_VERSION }}
           image-url: "oras://ghcr.io/g5t/stacktainer/kafka:${{ env.IMAGE_VERSION }}"
-
-          
+          add-tag: "latest"
