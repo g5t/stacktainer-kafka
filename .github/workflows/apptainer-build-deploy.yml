@@ -14,28 +14,32 @@ jobs:
       packages: write
     name: Build and Deploy 'Tainer
     if: startsWith(github.ref, 'refs/tags/v')
+    env:
+      IMAGE: oras://ghcr.io/g5t/stacktainer/kafka
     steps:
+      # Ubuntu 26.04 (ubuntu-latest since November 2026) packages Apptainer.
+      # It also stops unprivileged processes creating user namespaces unless an
+      # AppArmor profile allows the binary; without that, `apptainer build` fails with
+      # "mount namespace requires privileges". The runner is a throwaway VM, so lift
+      # the restriction outright.
       - name: Install Apptainer
-        uses: uw-psych/apptainer-actions/setup@main
-        with:
-          # This step breaks with apptainer 1.4.2
-          # https://github.com/uw-psych/apptainer-actions/issues/1
-          apptainer-version: 1.4.1
-      
-      - name: Check out
-        uses: actions/checkout@v4
-
-      - name: Set tag
-        shell: bash
         run: |
-          echo "IMAGE_VERSION=${GITHUB_REF_NAME#v}" >> "${GITHUB_ENV}"
+          sudo apt-get update
+          sudo apt-get install -y apptainer
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          apptainer --version
 
-      - name: Build and push image
-        uses: uw-psych/apptainer-actions/build-and-push@main
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Build
+        run: apptainer build kafka.sif image.def
+
+      - name: Push
         env:
           GITHUB_TOKEN: ${{ secrets.PACKAGE_TOKEN }}
-        with:
-          deffile: image.def
-          image-version: ${{ env.IMAGE_VERSION }}
-          image-url: "oras://ghcr.io/g5t/stacktainer/kafka:${{ env.IMAGE_VERSION }}"
-          add-tag: "latest"
+        run: |
+          echo "${GITHUB_TOKEN}" | apptainer registry login -u "${GITHUB_ACTOR}" --password-stdin oras://ghcr.io
+          for tag in "${GITHUB_REF_NAME#v}" latest; do
+            apptainer push -U kafka.sif "${IMAGE}:${tag}"
+          done
